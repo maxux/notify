@@ -9,6 +9,7 @@
 #include <netdb.h>
 
 // #define __DEBUG__
+#define BUFFER    1024
 
 //
 // command line arguments
@@ -54,6 +55,29 @@ void diep(char *str) {
 void dief(char *str) {
 	fprintf(stderr, "[-] %s\n", str);
 	exit(EXIT_FAILURE);
+}
+
+static char *parent(pid_t pid) {
+	char *name;
+	FILE *fp;
+	
+	if(!(name = (char *) calloc(BUFFER, sizeof(char))))
+		diep("[-] malloc");
+	
+	sprintf(name, "/proc/%d/cmdline", pid);
+	
+	if(!(fp = fopen(name, "r"))) {
+		perror(name);
+		sprintf(name, "default");
+		return name;
+	}
+	
+	if(!fread(name, sizeof(char), BUFFER, fp))
+		diep("[-] fread");
+		
+	fclose(fp);
+	
+	return name;
 }
 
 //
@@ -195,6 +219,9 @@ int main(int argc, char *argv[]) {
 		.message = NULL,
 		.tag     = NULL
 	};
+	
+	// default source
+	notification.source = parent(getppid());
 	
 	while(1) {
 		i = getopt_long(argc, argv, "h:p:s:l:t:m:g", long_options, &option_index);
