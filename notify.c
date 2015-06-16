@@ -22,6 +22,7 @@ static struct option long_options[] = {
 	{"title",   required_argument, 0, 't'},
 	{"message", required_argument, 0, 'm'},
 	{"tag",     required_argument, 0, 'g'},
+	{"fork",    no_argument,       0, 'f'},
 	{0, 0, 0, 0}
 };
 
@@ -92,6 +93,7 @@ void usage() {
 	printf(" --title    notification title (optional)\n");
 	printf(" --message  notification message\n");
 	printf(" --tag      internal tag of the message\n");
+	printf(" --fork     send message in background (non blocking)\n");
 	
 	exit(EXIT_FAILURE);
 }
@@ -209,6 +211,7 @@ int notifiy(notification_t *notification) {
 int main(int argc, char *argv[]) {
 	int option_index = 0;
 	int i;
+	int background = 0;
 	
 	notification_t notification = {
 		.host    = NULL,
@@ -237,6 +240,7 @@ int main(int argc, char *argv[]) {
 			case 't': notification.title   = optarg;       break;
 			case 'm': notification.message = optarg;       break;
 			case 'g': notification.tag     = optarg;       break;
+			case 'f': background = 1;                      break;
 			
 			case '?':
 				usage();
@@ -244,6 +248,15 @@ int main(int argc, char *argv[]) {
 
 			default:
 				abort();
+		}
+	}
+	
+	if(background) {
+		if(fork()) {
+			#ifdef __DEBUG__
+			printf("[+] forked, closing parent...\n");
+			#endif
+			exit(EXIT_SUCCESS);
 		}
 	}
 	
