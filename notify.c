@@ -23,6 +23,8 @@ static struct option long_options[] = {
 	{"message", required_argument, 0, 'm'},
 	{"tag",     required_argument, 0, 'g'},
 	{"fork",    no_argument,       0, 'f'},
+	{"backup",  required_argument, 0, 'b'},
+	{"help",    no_argument,       0, 'v'},
 	{0, 0, 0, 0}
 };
 
@@ -37,6 +39,7 @@ typedef struct notification_t {
 	char *title;
 	char *message;
 	char *tag;
+	char *backup;
 	
 } notification_t;
 
@@ -48,6 +51,8 @@ static char *__levels[] = {"low", "normal", "critical"};
 //
 // utilities
 //
+int transfert(notification_t *notification, char *payload);
+
 void diep(char *str) {
 	perror(str);
 	exit(EXIT_FAILURE);
@@ -94,8 +99,29 @@ void usage() {
 	printf(" --message  notification message\n");
 	printf(" --tag      internal tag of the message\n");
 	printf(" --fork     send message in background (non blocking)\n");
+	printf(" --backup   send to this host if server is not responding\n");
+	printf(" --help     print this message\n");
 	
 	exit(EXIT_FAILURE);
+}
+
+//
+// backup forward
+//
+int forward(notification_t *notification, char *payload, char *error) {
+	// no backup left, exiting.
+	if(!notification->backup)
+		diep(error);
+	
+	#ifdef __DEBUG__
+	perror(error);
+	printf("[+] falling back to host: %s\n", notification->backup);
+	#endif
+	
+	notification->host   = notification->backup;
+	notification->backup = NULL;
+	
+	return transfert(notification, payload);
 }
 
 //
@@ -117,17 +143,21 @@ int transfert(notification_t *notification, char *payload) {
 
 	// socket
 	if((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		diep("[-] socket");
+		forward(notification, payload, "[-] socket");
 
 	// connection
 	if((connresult = connect(fd, (struct sockaddr *) &host, sizeof(host))) < 0)
-		diep("[-] connect");
+		forward(notification, payload, "[-] connect");
 	
 	// sending payload
 	if(send(fd, payload, strlen(payload), 0) < 0)
-		diep("[-] send");
+		forward(notification, payload, "[-] send");
 	
 	close(fd);
+	
+	#ifdef __DEBUG__
+	printf("[+] notification sent\n");
+	#endif
 	
 	return 0;
 }
@@ -191,6 +221,7 @@ int notifiy(notification_t *notification) {
 	printf("[+] message: %s\n", notification->message);
 	printf("[+] source : %s\n", notification->source);
 	printf("[+] tag    : %s\n", notification->tag);
+	printf("[+] backup : %s\n", notification->backup);
 	#endif
 	
 	//
@@ -220,14 +251,15 @@ int main(int argc, char *argv[]) {
 		.level   = "normal",
 		.title   = "",
 		.message = NULL,
-		.tag     = NULL
+		.tag     = NULL,
+		.backup  = NULL,
 	};
 	
 	// default source
 	notification.source = parent(getppid());
 	
 	while(1) {
-		i = getopt_long(argc, argv, "h:p:s:l:t:m:g", long_options, &option_index);
+		i = getopt_long(argc, argv, "h:p:s:l:t:m:gb:v", long_options, &option_index);
 		
 		if(i == -1)
 			break;
@@ -240,8 +272,10 @@ int main(int argc, char *argv[]) {
 			case 't': notification.title   = optarg;       break;
 			case 'm': notification.message = optarg;       break;
 			case 'g': notification.tag     = optarg;       break;
+			case 'b': notification.backup  = optarg;       break;
 			case 'f': background = 1;                      break;
 			
+			case 'v':
 			case '?':
 				usage();
 			break;
